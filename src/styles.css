@@ -1,0 +1,971 @@
+/* ===== Carta — look chaleureux « encre sur papier » ===== */
+
+:root {
+  --paper: #f7efdd;        /* fond crème */
+  --paper-2: #fbf5e7;      /* papier des colonnes / cartes */
+  --ink: #3a2c20;          /* brun foncé (encre) */
+  --ink-soft: #6f5a47;     /* brun adouci */
+  --line: #e3d3b3;         /* lignes / bordures */
+  --accent: #9a5b34;       /* terre de Sienne */
+  --accent-2: #7a8b5a;     /* vert olive doux */
+  --shadow: 0 2px 6px rgba(58, 44, 32, 0.12);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  height: 100%;
+  background: var(--paper);
+  /* léger grain de papier */
+  background-image: radial-gradient(rgba(122, 82, 54, 0.05) 1px, transparent 1px);
+  background-size: 18px 18px;
+  color: var(--ink);
+  font-family: 'Iowan Old Style', 'Palatino Linotype', Georgia, 'Times New Roman', serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+.app {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ===== En-tête ===== */
+.app-header {
+  padding: 18px 24px;
+  border-bottom: 1px solid var(--line);
+  position: sticky;
+  top: 0;
+  background: rgba(247, 239, 221, 0.92);
+  backdrop-filter: blur(4px);
+  z-index: 5;
+}
+
+.brand {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.brand h1 {
+  margin: 0;
+  font-size: 30px;
+  letter-spacing: 0.5px;
+}
+
+.brand-spacer {
+  flex: 1;
+}
+
+/* ===== Barre de connexion / synchronisation ===== */
+.auth-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.auth-email {
+  padding: 7px 11px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--paper-2);
+  color: var(--ink);
+  font-family: inherit;
+  font-size: 14px;
+  min-width: 200px;
+}
+
+.auth-email:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.sync-state {
+  font-size: 13px;
+  color: var(--ink-soft);
+}
+
+.sync-state.ok {
+  color: var(--accent-2);
+}
+
+.sync-dot {
+  color: var(--accent-2);
+  font-size: 12px;
+}
+
+.tagline {
+  color: var(--ink-soft);
+  font-style: italic;
+  font-size: 14px;
+}
+
+.toolbar {
+  margin-top: 14px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+.search {
+  flex: 1 1 220px;
+  min-width: 180px;
+  padding: 9px 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--paper-2);
+  color: var(--ink);
+  font-family: inherit;
+  font-size: 15px;
+}
+
+.search:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.ghost-btn {
+  padding: 8px 14px;
+  border: 1px solid var(--ink-soft);
+  border-radius: 12px;
+  background: transparent;
+  color: var(--ink);
+  font-family: inherit;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.ghost-btn:hover {
+  background: var(--paper-2);
+}
+
+/* Bouton « activé » (ex. filtre En retard en cours). */
+.ghost-btn.active {
+  background: var(--accent);
+  color: var(--paper);
+  border-color: var(--accent);
+}
+
+/* Bascule Tableau / Carte mentale. */
+.view-toggle {
+  display: flex;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  overflow: hidden;
+  background: var(--paper-2);
+}
+
+.view-btn {
+  border: none;
+  background: transparent;
+  padding: 8px 14px;
+  font-family: inherit;
+  font-size: 14px;
+  color: var(--ink-soft);
+  cursor: pointer;
+}
+
+.view-btn.active {
+  background: var(--accent);
+  color: #fff7ea;
+}
+
+/* Vue carte mentale (React Flow). */
+.board-mindmap {
+  padding: 0;
+  overflow: hidden;
+}
+
+.mindmap {
+  flex: 1;
+  width: 100%;
+  min-height: 0;
+}
+
+/* Contrôle de zoom (− / % / +). */
+.zoom-control {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding-left: 10px;
+  border-left: 1px solid var(--line);
+}
+
+.zoom-btn {
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--paper-2);
+  color: var(--ink);
+  font-size: 17px;
+  line-height: 1;
+  cursor: pointer;
+  transition: border-color 0.15s ease;
+}
+
+.zoom-btn:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+
+.zoom-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.zoom-level {
+  min-width: 50px;
+  padding: 6px 4px;
+  border: none;
+  background: transparent;
+  color: var(--ink-soft);
+  font-family: inherit;
+  font-size: 13px;
+  text-align: center;
+  cursor: pointer;
+}
+
+.zoom-level:hover {
+  color: var(--accent);
+}
+
+/* ===== Tableau : pile verticale de groupes ===== */
+.board {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  padding: 22px 24px 40px;
+  overflow-y: auto;
+}
+
+/* ===== Groupe (grand thème repliable) ===== */
+.group {
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--accent);
+  border-radius: 16px;
+  background: rgba(154, 91, 52, 0.04);
+  padding: 12px 14px 14px;
+}
+
+.group-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.collapse-btn {
+  border: none;
+  background: transparent;
+  color: var(--ink);
+  font-size: 16px;
+  cursor: pointer;
+  padding: 2px 4px;
+  line-height: 1;
+}
+
+.group-name {
+  margin: 0;
+  font-size: 20px;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.group-name-input {
+  font-size: 20px;
+  font-family: inherit;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  padding: 3px 7px;
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--ink);
+}
+
+.group-count {
+  font-size: 13px;
+  color: #fff7ea;
+  background: var(--accent);
+  border-radius: 999px;
+  padding: 1px 9px;
+}
+
+.group-actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ghost-btn.small {
+  padding: 5px 10px;
+  font-size: 13px;
+}
+
+/* Lien discret (ex. « Mot de passe oublié ? ») : pas de bordure, souligné. */
+.link-btn {
+  border: none;
+  background: transparent;
+  color: var(--ink-soft);
+  font-family: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+  padding: 5px 4px;
+}
+
+.link-btn.small {
+  font-size: 13px;
+}
+
+.link-btn:hover {
+  color: var(--ink);
+}
+
+.group-columns {
+  display: flex;
+  gap: 16px;
+  overflow-x: auto;
+  align-items: flex-start;
+  padding-bottom: 4px;
+}
+
+.empty-group {
+  padding: 14px;
+}
+
+.column {
+  flex: 0 0 280px;
+  background: var(--paper-2);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 14px;
+  box-shadow: var(--shadow);
+  display: flex;
+  flex-direction: column;
+  max-height: 70vh;
+}
+
+.column.drag-over {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(154, 91, 52, 0.3);
+}
+
+.column-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.column-name {
+  margin: 0;
+  font-size: 18px;
+  cursor: pointer;
+  flex: 1;
+}
+
+.column-name-input {
+  flex: 1;
+  font-size: 18px;
+  font-family: inherit;
+  padding: 4px 6px;
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--ink);
+}
+
+.column-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.move-col-select {
+  font-size: 12px;
+  font-family: inherit;
+  padding: 2px 4px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--paper);
+  color: var(--ink-soft);
+  cursor: pointer;
+  max-width: 60px;
+}
+
+.count {
+  font-size: 13px;
+  color: var(--ink-soft);
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 1px 9px;
+}
+
+.cards {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  overflow-y: auto;
+  padding: 2px;
+}
+
+/* ===== Carte ===== */
+.card {
+  background: #fffdf7;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 11px 12px;
+  box-shadow: var(--shadow);
+  cursor: grab;
+  transition: opacity 0.18s ease, box-shadow 0.18s ease,
+    border-color 0.18s ease;
+}
+
+.card:active {
+  cursor: grabbing;
+}
+
+/* Surlignage des liens : la carte survolée et ses cartes liées ressortent,
+   les autres s'estompent. */
+.card-hover {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(154, 91, 52, 0.35);
+}
+
+.card-linked {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(154, 91, 52, 0.22);
+}
+
+.card-dim {
+  opacity: 0.32;
+}
+
+/* Repère « insérer ici » : une carte glissée survole celle-ci ; on insérera
+   la carte déplacée juste au-dessus. */
+.card-drop-before {
+  box-shadow: inset 0 3px 0 0 var(--accent);
+}
+
+.card-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Champ d'échéance discret en haut de carte. */
+.due-input {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ink-soft);
+  font-family: inherit;
+  font-size: 11px;
+  padding: 2px 6px;
+  cursor: pointer;
+}
+
+.due-input.due-overdue {
+  color: #b23b2b;
+  border-color: #b23b2b;
+  font-weight: 600;
+}
+
+.card-title {
+  margin: 8px 0 4px;
+  font-size: 16px;
+  cursor: text;
+  word-break: break-word;
+}
+
+.card-title-input {
+  width: 100%;
+  margin: 8px 0 4px;
+  font-size: 16px;
+  font-family: inherit;
+  padding: 4px 6px;
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--ink);
+}
+
+.card-note {
+  margin: 0 0 8px;
+  font-size: 14px;
+  color: var(--ink-soft);
+  cursor: text;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.card-note.empty {
+  font-style: italic;
+  opacity: 0.6;
+}
+
+.card-note-input {
+  width: 100%;
+  min-height: 60px;
+  margin: 0 0 8px;
+  font-size: 14px;
+  font-family: inherit;
+  padding: 6px;
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--ink);
+  resize: vertical;
+}
+
+.people-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-bottom: 8px;
+}
+
+.chip {
+  font-size: 12px;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 2px 9px;
+  color: var(--ink);
+}
+
+.card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.mini-btn {
+  font-size: 13px;
+  font-family: inherit;
+  padding: 4px 9px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--paper);
+  color: var(--ink);
+  cursor: pointer;
+  text-decoration: none;
+  display: inline-block;
+}
+
+.mini-btn:hover {
+  border-color: var(--accent);
+}
+
+/* Bouton « 🔗 » mis en valeur quand la carte a des liens. */
+.mini-btn.has-links {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* ===== Liens entre cartes (popover) ===== */
+.link-popover {
+  margin-top: 8px;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--paper);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.link-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.link-list li {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.link-jump {
+  flex: 1;
+  text-align: left;
+  border: none;
+  background: transparent;
+  color: var(--ink);
+  font-family: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  padding: 3px 4px;
+  border-radius: 6px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.link-jump:hover {
+  background: var(--paper-2);
+  color: var(--accent);
+}
+
+.link-dir {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.link-form {
+  display: flex;
+  gap: 6px;
+}
+
+.link-form select {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  font-family: inherit;
+  padding: 4px 6px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--paper);
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.link-form .add-btn {
+  width: 32px;
+  font-size: 17px;
+}
+
+/* Suggestions de liens (mots-clés communs). */
+.link-suggestions {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.link-sug-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--ink-soft);
+}
+
+.link-sug-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.link-sug-chip {
+  font-size: 12px;
+  font-family: inherit;
+  padding: 3px 9px;
+  border: 1px dashed var(--accent);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--accent);
+  cursor: pointer;
+}
+
+.link-sug-chip:hover {
+  background: rgba(154, 91, 52, 0.08);
+}
+
+/* ===== @mention dans la note ===== */
+.note-edit {
+  position: relative;
+}
+
+.mention-list {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 4px;
+  position: absolute;
+  left: 0;
+  right: 0;
+  z-index: 20;
+  background: var(--paper);
+  border: 1px solid var(--accent);
+  border-radius: 10px;
+  box-shadow: var(--shadow);
+  max-height: 180px;
+  overflow-y: auto;
+}
+
+.mention-item {
+  width: 100%;
+  text-align: left;
+  border: none;
+  background: transparent;
+  color: var(--ink);
+  font-family: inherit;
+  font-size: 13px;
+  padding: 5px 8px;
+  border-radius: 7px;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mention-item:hover,
+.mention-item.active {
+  background: var(--paper-2);
+  color: var(--accent);
+}
+
+.move-select {
+  font-size: 13px;
+  font-family: inherit;
+  padding: 4px 6px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--paper);
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.people-popover {
+  margin-top: 8px;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--paper);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.people-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.muted {
+  color: var(--ink-soft);
+  font-style: italic;
+  font-size: 13px;
+  margin: 2px 0;
+}
+
+/* ===== Ajout de carte ===== */
+.add-card {
+  display: flex;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.add-card input {
+  flex: 1;
+  padding: 8px 11px;
+  border: 1px dashed var(--ink-soft);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--ink);
+  font-family: inherit;
+  font-size: 14px;
+}
+
+.add-card input:focus {
+  outline: none;
+  border-style: solid;
+  border-color: var(--accent);
+}
+
+.add-btn {
+  width: 38px;
+  border: none;
+  border-radius: 10px;
+  background: var(--accent);
+  color: #fff7ea;
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.add-btn:hover {
+  background: #84492a;
+}
+
+.icon-btn {
+  border: none;
+  background: transparent;
+  color: var(--ink-soft);
+  font-size: 19px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 4px;
+  border-radius: 6px;
+}
+
+.icon-btn:hover {
+  color: var(--accent);
+  background: var(--paper);
+}
+
+/* ===== Fenêtre carnet de contacts ===== */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(58, 44, 32, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 20;
+  padding: 20px;
+}
+
+.modal {
+  width: 100%;
+  max-width: 460px;
+  background: var(--paper-2);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 20px;
+  box-shadow: 0 12px 30px rgba(58, 44, 32, 0.3);
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 14px;
+}
+
+.modal-header h2 {
+  margin: 0;
+  font-size: 22px;
+}
+
+.contact-form {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.contact-form input {
+  flex: 1;
+  padding: 8px 11px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fffdf7;
+  color: var(--ink);
+  font-family: inherit;
+  font-size: 14px;
+}
+
+.contact-form input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.contact-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.contact-list li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 11px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fffdf7;
+  font-size: 14px;
+}
+
+/* ===== Barres de défilement discrètes ===== */
+.cards::-webkit-scrollbar,
+.board::-webkit-scrollbar,
+.contact-list::-webkit-scrollbar {
+  height: 9px;
+  width: 9px;
+}
+
+.cards::-webkit-scrollbar-thumb,
+.board::-webkit-scrollbar-thumb,
+.contact-list::-webkit-scrollbar-thumb {
+  background: var(--line);
+  border-radius: 999px;
+}
+
+/* ===== Écran d'erreur (filet de sécurité) ===== */
+.error-boundary {
+  max-width: 420px;
+  margin: 80px auto;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  color: var(--ink);
+}
+
+/* ===== Toast « Annuler » après une suppression ===== */
+.undo-toast {
+  position: fixed;
+  left: 50%;
+  bottom: 24px;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  background: var(--ink);
+  color: var(--paper);
+  padding: 10px 16px;
+  border-radius: 12px;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.25);
+  font-size: 14px;
+  z-index: 1000;
+}
+
+.undo-btn {
+  border: none;
+  background: transparent;
+  color: var(--paper);
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: underline;
+  cursor: pointer;
+  padding: 2px 4px;
+}
+
+.undo-btn:hover {
+  color: #fff;
+}
