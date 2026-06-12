@@ -10,6 +10,7 @@ export default function AuthBar({
   status,
   recovering,
   onSignIn,
+  onSignInGoogle,
   onSignUp,
   onResetPassword,
   onUpdatePassword,
@@ -174,6 +175,11 @@ export default function AuthBar({
       <button className="ghost-btn small" onClick={handleSignUp}>
         Créer un compte
       </button>
+      {onSignInGoogle && (
+        <button className="ghost-btn small" onClick={() => onSignInGoogle()}>
+          Continuer avec Google
+        </button>
+      )}
       <button className="link-btn small" onClick={handleReset}>
         Mot de passe oublié ?
       </button>

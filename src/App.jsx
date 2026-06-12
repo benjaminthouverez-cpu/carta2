@@ -3,6 +3,7 @@ import Group from './components/Group'
 import ContactBook from './components/ContactBook'
 import AuthBar from './components/AuthBar'
 import { supabase } from './supabase'
+import { signInWithGoogle } from './db'
 import {
   loadState,
   saveState,
@@ -214,6 +215,12 @@ export default function App() {
   // Connexion par e-mail + mot de passe.
   async function signIn(email, password) {
     const { error } = await supabase.auth.signInWithPassword({ email, password })
+    return error ? { ok: false, message: error.message } : { ok: true }
+  }
+
+  // Connexion via Google (redirige puis revient connecté).
+  async function signInGoogle() {
+    const { error } = await signInWithGoogle()
     return error ? { ok: false, message: error.message } : { ok: true }
   }
 
@@ -625,6 +632,7 @@ export default function App() {
             status={status}
             recovering={recovering}
             onSignIn={signIn}
+            onSignInGoogle={signInGoogle}
             onSignUp={signUp}
             onResetPassword={resetPassword}
             onUpdatePassword={updatePassword}
