@@ -3,7 +3,14 @@ import Group from './components/Group'
 import ContactBook from './components/ContactBook'
 import AuthBar from './components/AuthBar'
 import { supabase } from './supabase'
-import { signInWithGoogle } from './db'
+import {
+  signInWithGoogle,
+  getOrCreateDefaultBoard,
+  loadBoard,
+  persistBoard,
+  collectIds,
+  subscribeBoard,
+} from './db'
 import {
   loadState,
   saveState,
@@ -28,15 +35,6 @@ const LINK_LABEL = Object.fromEntries(LINK_TYPES.map(t => [t.key, t.label]))
 // La vue carte mentale embarque React Flow : on la charge à la demande pour
 // alléger le chargement initial de l'app.
 const MindMap = lazy(() => import('./components/MindMap'))
-
-// Identifiant unique de cet onglet/appareil. Il sert à reconnaître — et donc à
-// ignorer — nos PROPRES mises à jour qui nous reviennent en temps réel.
-// (Supabase stocke en JSON « jsonb » et réordonne les clés : on ne peut donc
-// pas se fier à une simple comparaison de texte pour repérer notre écho.)
-const CLIENT_ID =
-  typeof crypto !== 'undefined' && crypto.randomUUID
-    ? crypto.randomUUID()
-    : Math.random().toString(36).slice(2)
 
 export default function App() {
   // On charge une seule fois l'état sauvegardé localement au démarrage
@@ -73,8 +71,14 @@ export default function App() {
   const undoTimerRef = useRef(null)
   const [cloudReady, setCloudReady] = useState(false)
   const [status, setStatus] = useState('')
-  const lastSyncedRef = useRef(null) // dernier contenu envoyé/reçu (anti-boucle)
+  // Tableau relationnel courant (null en local/déconnecté).
+  const [boardId, setBoardId] = useState(null)
+  const lastSyncedRef = useRef(null) // dernier contenu poussé (anti-boucle)
   const saveTimerRef = useRef(null)
+  // Identifiants présents au dernier chargement/sauvegarde (diff des suppressions).
+  const knownIdsRef = useRef({ groups: new Set(), columns: new Set(), cards: new Set(), links: new Set() })
+  const reloadTimerRef = useRef(null)
+  const lastLocalWriteRef = useRef(0) // pour ignorer l'écho temps-réel de nos écritures
   const stateRef = useRef({ groups, contacts, links, positions })
   stateRef.current = { groups, contacts, links, positions }
 
@@ -89,128 +93,116 @@ export default function App() {
     return () => sub.subscription.unsubscribe()
   }, [])
 
-  // --- Au login : on charge les données du cloud ---
+  // --- Au login : on charge le tableau relationnel ---
   useEffect(() => {
     if (!supabase || !session) {
       setCloudReady(false)
+      setBoardId(null)
       return
     }
     let cancelled = false
-    async function load() {
+    ;(async () => {
       setCloudReady(false)
       setStatus('Chargement…')
-      const { data, error } = await supabase
-        .from('boards')
-        .select('data')
-        .eq('user_id', session.user.id)
-        .maybeSingle()
-      if (cancelled) return
-      if (error) {
-        setStatus('Erreur de chargement')
-        setCloudReady(true)
-        return
-      }
-      if (data && data.data && Array.isArray(data.data.groups)) {
-        // Le cloud fait foi : on adopte ses données (on ne garde que le contenu
-        // du tableau, sans les métadonnées internes comme _writer).
-        const content = {
-          groups: data.data.groups,
-          contacts: data.data.contacts || [],
-          links: data.data.links || [],
-          positions: data.data.positions || {},
+      try {
+        const board = await getOrCreateDefaultBoard(session.user.id)
+        if (cancelled) return
+        setBoardId(board.id)
+        const loaded = await loadBoard(board.id)
+        if (cancelled) return
+        if (loaded.groups.length === 0) {
+          // Tableau neuf : on l'amorce avec la structure par défaut ; la
+          // sauvegarde la poussera en base.
+          knownIdsRef.current = { groups: new Set(), columns: new Set(), cards: new Set(), links: new Set() }
+          lastSyncedRef.current = null
+          setGroups(freshState().groups)
+          setLinks([])
+          setPositions({})
+        } else {
+          knownIdsRef.current = collectIds(loaded.groups, loaded.links)
+          lastSyncedRef.current = JSON.stringify({
+            groups: loaded.groups,
+            links: loaded.links,
+            positions: loaded.positions,
+          })
+          setGroups(loaded.groups)
+          setLinks(loaded.links)
+          setPositions(loaded.positions)
         }
-        lastSyncedRef.current = JSON.stringify(content)
-        setGroups(content.groups)
-        setContacts(content.contacts)
-        setLinks(content.links)
-        setPositions(content.positions)
         setStatus('Synchronisé')
-      } else {
-        // Aucune donnée dans le cloud : on y pousse l'état local actuel.
-        await pushToCloud(session.user.id, stateRef.current)
+      } catch (e) {
+        if (!cancelled) setStatus('Erreur de chargement')
+      } finally {
+        if (!cancelled) setCloudReady(true)
       }
-      setCloudReady(true)
-    }
-    load()
+    })()
     return () => {
       cancelled = true
     }
   }, [session])
 
-  // --- Mise à jour en direct depuis un autre appareil ---
+  // --- Temps réel : recharge le tableau quand un AUTRE appareil le modifie ---
   useEffect(() => {
-    if (!supabase || !session) return
-    const channel = supabase
-      .channel('board-' + session.user.id)
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'boards',
-          filter: 'user_id=eq.' + session.user.id,
-        },
-        payload => {
-          const row = payload.new
-          if (!row || !row.data || !Array.isArray(row.data.groups)) return
-          // On ignore nos propres écritures (même appareil) : elles sont déjà
-          // appliquées localement. On n'applique que les vraies mises à jour
-          // venant d'un AUTRE appareil.
-          if (row.data._writer === CLIENT_ID) return
-          const content = {
-            groups: row.data.groups,
-            contacts: row.data.contacts || [],
-            links: row.data.links || [],
-            positions: row.data.positions || {},
-          }
-          lastSyncedRef.current = JSON.stringify(content)
-          setGroups(content.groups)
-          setContacts(content.contacts)
-          setLinks(content.links)
-          setPositions(content.positions)
-          setStatus('Mis à jour depuis un autre appareil')
-        }
-      )
-      .subscribe()
-    return () => {
-      supabase.removeChannel(channel)
+    if (!supabase || !session || !boardId) return
+    async function reload() {
+      // On ignore l'écho de nos propres écritures récentes (sinon un
+      // rechargement inutile écraserait une saisie en cours).
+      if (Date.now() - lastLocalWriteRef.current < 2500) return
+      try {
+        const loaded = await loadBoard(boardId)
+        knownIdsRef.current = collectIds(loaded.groups, loaded.links)
+        lastSyncedRef.current = JSON.stringify({
+          groups: loaded.groups,
+          links: loaded.links,
+          positions: loaded.positions,
+        })
+        setGroups(loaded.groups)
+        setLinks(loaded.links)
+        setPositions(loaded.positions)
+        setStatus('Mis à jour depuis un autre appareil')
+      } catch (e) {
+        // rechargement raté : on réessaiera au prochain événement
+      }
     }
-  }, [session])
+    const onChange = () => {
+      clearTimeout(reloadTimerRef.current)
+      reloadTimerRef.current = setTimeout(reload, 500)
+    }
+    const unsub = subscribeBoard(boardId, onChange)
+    return () => {
+      clearTimeout(reloadTimerRef.current)
+      unsub()
+    }
+  }, [session, boardId])
 
-  // --- Sauvegarde : locale toujours, cloud si connecté ---
+  // --- Sauvegarde : cache local toujours, base relationnelle si connecté ---
   useEffect(() => {
-    const payload = { groups, contacts, links, positions }
-    saveState(payload) // cache local (hors-ligne)
+    saveState({ groups, contacts, links, positions }) // cache local hors-ligne
 
-    if (!supabase || !session) return
-    if (!cloudReady) return // on attend la fin du chargement initial
-    const json = JSON.stringify(payload)
-    if (json === lastSyncedRef.current) return // rien de neuf
+    if (!supabase || !session || !boardId || !cloudReady) return
+    // Les contacts ne sont pas encore synchronisés : on ne déclenche la
+    // sauvegarde cloud que sur la structure du tableau.
+    const json = JSON.stringify({ groups, links, positions })
+    if (json === lastSyncedRef.current) return
 
     setStatus('Sauvegarde…')
     clearTimeout(saveTimerRef.current)
-    saveTimerRef.current = setTimeout(() => {
-      pushToCloud(session.user.id, payload)
+    saveTimerRef.current = setTimeout(async () => {
+      try {
+        const cur = await persistBoard(
+          boardId,
+          { groups, links, positions },
+          knownIdsRef.current
+        )
+        knownIdsRef.current = cur
+        lastSyncedRef.current = json
+        lastLocalWriteRef.current = Date.now()
+        setStatus('Synchronisé')
+      } catch (e) {
+        setStatus('Erreur de sauvegarde')
+      }
     }, 700)
-  }, [groups, contacts, links, positions, session, cloudReady])
-
-  // Envoie l'état complet vers le cloud.
-  async function pushToCloud(userId, payload) {
-    const json = JSON.stringify(payload)
-    const { error } = await supabase.from('boards').upsert({
-      user_id: userId,
-      // On marque l'écriture avec notre identifiant d'appareil pour pouvoir
-      // ignorer l'écho temps-réel qui nous reviendra.
-      data: { ...payload, _writer: CLIENT_ID },
-      updated_at: new Date().toISOString(),
-    })
-    if (error) {
-      setStatus('Erreur de sauvegarde')
-    } else {
-      lastSyncedRef.current = json
-      setStatus('Synchronisé')
-    }
-  }
+  }, [groups, contacts, links, positions, session, boardId, cloudReady])
 
   // Connexion par e-mail + mot de passe.
   async function signIn(email, password) {
@@ -245,6 +237,8 @@ export default function App() {
     setContacts(fresh.contacts)
     setLinks(fresh.links)
     setPositions(fresh.positions)
+    setBoardId(null)
+    knownIdsRef.current = { groups: new Set(), columns: new Set(), cards: new Set(), links: new Set() }
     lastSyncedRef.current = null
   }
 

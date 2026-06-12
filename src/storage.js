@@ -33,8 +33,10 @@ export function saveZoom(z) {
   }
 }
 
-// Génère un identifiant unique simple.
+// Génère un identifiant unique. UUID (compatible avec les colonnes uuid de la
+// base relationnelle 2.0) ; repli simple si crypto.randomUUID indisponible.
 export function uid() {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID()
   return Math.random().toString(36).slice(2, 10) + Date.now().toString(36)
 }
 

@@ -81,7 +81,9 @@ export async function loadBoard(boardId) {
 export function assembleBoard(groups, columns, cards, links) {
   const cardsByCol = {}
   for (const card of cards) {
-    ;(cardsByCol[card.column_id] ||= []).push(card)
+    // `people` n'est pas (encore) en base côté 2.0 : on garantit le tableau
+    // attendu par l'UI (l'attribution se fera via les membres plus tard).
+    ;(cardsByCol[card.column_id] ||= []).push({ ...card, people: [] })
   }
   const colsByGroup = {}
   for (const col of columns) {
@@ -101,7 +103,9 @@ export function assembleBoard(groups, columns, cards, links) {
       positions[card.id] = { x: card.mind_x, y: card.mind_y }
     }
   }
-  return { groups: tree, links, positions }
+  // L'UI attend des liens { id, from, to, type } (la base stocke from_card/to_card).
+  const uiLinks = links.map(l => ({ id: l.id, from: l.from_card, to: l.to_card, type: l.type }))
+  return { groups: tree, links: uiLinks, positions }
 }
 
 // --------------------------------------------------------------------------
@@ -280,4 +284,100 @@ export function subscribeBoard(boardId, onChange) {
   }
   channel.subscribe()
   return () => supabase.removeChannel(channel)
+}
+
+// --------------------------------------------------------------------------
+// Persistance par réconciliation
+//
+// L'UI continue de manipuler l'arborescence en mémoire (groups→columns→cards
+// + links + positions). À la sauvegarde, on « met à plat » cet état en lignes,
+// on les upsert (parents avant enfants), puis on supprime de la base les lignes
+// qui ont disparu (enfants avant parents). La position = l'index dans le tableau.
+// --------------------------------------------------------------------------
+
+// Met l'arborescence à plat en lignes prêtes pour la base.
+function flattenBoard(boardId, groups, links, positions) {
+  const groupsR = []
+  const columnsR = []
+  const cardsR = []
+  const linksR = []
+  groups.forEach((g, gi) => {
+    groupsR.push({ id: g.id, board_id: boardId, title: g.title, position: gi, collapsed: !!g.collapsed })
+    ;(g.columns || []).forEach((col, ci) => {
+      columnsR.push({ id: col.id, board_id: boardId, group_id: g.id, title: col.title, position: ci })
+      ;(col.cards || []).forEach((card, ai) => {
+        const p = positions[card.id]
+        cardsR.push({
+          id: card.id,
+          board_id: boardId,
+          column_id: col.id,
+          title: card.title || '',
+          note: card.note || '',
+          due: card.due ? card.due : null,
+          position: ai,
+          mind_x: p ? p.x : null,
+          mind_y: p ? p.y : null,
+        })
+      })
+    })
+  })
+  links.forEach(l => {
+    linksR.push({ id: l.id, board_id: boardId, from_card: l.from, to_card: l.to, type: l.type })
+  })
+  return { groupsR, columnsR, cardsR, linksR }
+}
+
+// Ensemble des identifiants présents dans l'état courant (pour le diff de suppression).
+export function collectIds(groups, links) {
+  const g = new Set()
+  const c = new Set()
+  const k = new Set()
+  const l = new Set()
+  for (const grp of groups) {
+    g.add(grp.id)
+    for (const col of grp.columns || []) {
+      c.add(col.id)
+      for (const card of col.cards || []) k.add(card.id)
+    }
+  }
+  for (const link of links) l.add(link.id)
+  return { groups: g, columns: c, cards: k, links: l }
+}
+
+async function upsertRows(table, rows) {
+  if (!rows.length) return
+  const { error } = await supabase.from(table).upsert(rows)
+  if (error) throw error
+}
+
+async function deleteRows(table, ids) {
+  if (!ids.length) return
+  const { error } = await supabase.from(table).delete().in('id', ids)
+  if (error) throw error
+}
+
+// Synchronise tout le tableau vers la base. `prevIds` = identifiants présents au
+// dernier chargement/sauvegarde (pour détecter les suppressions). Renvoie les
+// nouveaux ensembles d'identifiants.
+export async function persistBoard(boardId, state, prevIds) {
+  const { groupsR, columnsR, cardsR, linksR } = flattenBoard(
+    boardId,
+    state.groups,
+    state.links,
+    state.positions
+  )
+  // Upsert parents → enfants (respecte les clés étrangères).
+  await upsertRows('groups', groupsR)
+  await upsertRows('columns', columnsR)
+  await upsertRows('cards', cardsR)
+  await upsertRows('links', linksR)
+
+  const cur = collectIds(state.groups, state.links)
+  const removed = (prev, now) => [...prev].filter(id => !now.has(id))
+  // Suppressions enfants → parents (le cascade nettoie le reste sans erreur).
+  await deleteRows('links', removed(prevIds.links, cur.links))
+  await deleteRows('cards', removed(prevIds.cards, cur.cards))
+  await deleteRows('columns', removed(prevIds.columns, cur.columns))
+  await deleteRows('groups', removed(prevIds.groups, cur.groups))
+  return cur
 }
